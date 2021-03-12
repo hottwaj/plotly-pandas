@@ -1,5 +1,3 @@
-import uuid
-import json
 import numpy
 import pandas
 import copy
@@ -113,19 +111,6 @@ def dict_merge(a, b, path=None):
             a[key] = bval
     return a
 
-
-class NumpyPandasJsonEncoder(json.JSONEncoder):
-    # for encoding numpy/pandas data to json.
-    # see https://stackoverflow.com/a/47626762/1280629
-    # also possible python library alternative (but does not include pandas categorical):
-    # https://github.com/hmallen/numpyencoder
-    def default(self, obj):
-        if isinstance(obj, numpy.ndarray):
-            return obj.tolist()
-        if isinstance(obj, pandas.Categorical):
-            return obj.to_list()
-        return json.JSONEncoder.default(self, obj)
-
 class PlotlyChartBundle(object):
     """Class for returning a displayable object wrapping a plotly chart.
     This is used to wrap a plotted chart so we can then drop it into a table if required."""
@@ -188,37 +173,20 @@ class PlotlyChartBundle(object):
     def write_json(self, filename, *args, **kwargs):
         pio.write_json(self.data_layout, filename, *args, **kwargs)        
 
-    def to_html(self, width = None, height = None, use_plotlypy_plot = True, responsive = True, **kwargs):
+    def to_html(self, width = None, height = None, responsive = True, **kwargs):
         fig_dict = self.to_plotly_fig_dict()
         if responsive:
             fig_dict['layout']['width'] = None
             fig_dict['layout']['height'] = None
         config = {**{'responsive': responsive}, **self.config}
-        if use_plotlypy_plot:
-            return plot(fig_dict,
-                        output_type="div",
-                        image_width = None if responsive else width or self.width,
-                        image_height = None if responsive else height or self.height,
-                        config = self.config,
-                        include_plotlyjs = False,
-                        **kwargs,
-                        )
-        else:
-            div_id = uuid.uuid4()
-            data_json = json.dumps(fig_dict['data'], cls = NumpyPandasJsonEncoder)
-            layout_json = json.dumps(fig_dict['layout'], cls = NumpyPandasJsonEncoder)
-            config_json = json.dumps(config)
-            return f"""
-                <div id="{div_id}" class="plotly-graph-div" style=""></div>
-                <script type="text/javascript">
-                window.PLOTLYENV=window.PLOTLYENV || {{}};
-                (function () {{
-                    var div_id = "{div_id}";
-                    if (document.getElementById(div_id)) {{
-                        Plotly.newPlot(div_id,{data_json}, {layout_json}, {config_json});
-                    }}
-                }})();
-                </script>"""
+        return plot(fig_dict,
+                    output_type="div",
+                    image_width = None if responsive else width or self.width,
+                    image_height = None if responsive else height or self.height,
+                    config = config,
+                    include_plotlyjs = False,
+                    **kwargs,
+                    )
     
 def scatter(df, x_col, y_col, 
                      groups_col = None, tooltip_cols = None, group_order = None, 
