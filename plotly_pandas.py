@@ -1,3 +1,5 @@
+import uuid
+import json
 import numpy
 import pandas
 import copy
@@ -111,6 +113,19 @@ def dict_merge(a, b, path=None):
             a[key] = bval
     return a
 
+
+class NumpyPandasJsonEncoder(json.JSONEncoder):
+    # for encoding numpy/pandas data to json.
+    # see https://stackoverflow.com/a/47626762/1280629
+    # also possible python library alternative (but does not include pandas categorical):
+    # https://github.com/hmallen/numpyencoder
+    def default(self, obj):
+        if isinstance(obj, numpy.ndarray):
+            return obj.tolist()
+        if isinstance(obj, pandas.Categorical):
+            return obj.to_list()
+        return json.JSONEncoder.default(self, obj)
+
 class PlotlyChartBundle(object):
     """Class for returning a displayable object wrapping a plotly chart.
     This is used to wrap a plotted chart so we can then drop it into a table if required."""
@@ -120,6 +135,14 @@ class PlotlyChartBundle(object):
         self.width = width
         self.height = height
         self.config = config
+
+    def to_plotly_fig_dict(self):
+        """Get figure & validate it - this provides standard checking of data&layout values given to plotly
+        this is an abridged version of what is done by the functions:
+        plotly.offline.iplot & plotly.io._renderers.show"""
+        figure = plotly.tools.return_figure_from_figure_or_data(self.data_layout, validate_figure=True)
+        fig_dict = plotly.io._utils.validate_coerce_fig_to_dict(figure, validate=True)
+        return fig_dict
         
     def _repr_mimebundle_(self, **kwargs):
         """Construct a mime_bundle using various plotly internal functions
@@ -128,10 +151,7 @@ class PlotlyChartBundle(object):
         however those functions display the mime_bundle directly using ipython.display() without returning it.
 
         By capturing the mime_bundle here its later possible to inject it into other html e.g. to build tables of charts"""
-
-        # Get figure & validate it - this provides standard checking of data&layout values given to plotly
-        figure = plotly.tools.return_figure_from_figure_or_data(self.data_layout, validate_figure = True)
-        fig_dict = plotly.io._utils.validate_coerce_fig_to_dict(figure, validate = True)
+        fig_dict = self.to_plotly_fig_dict()
 
         # build & return bundle
         bundle = plotly.io.renderers._build_mime_bundle(fig_dict, config = self.config, **kwargs)
@@ -168,15 +188,37 @@ class PlotlyChartBundle(object):
     def write_json(self, filename, *args, **kwargs):
         pio.write_json(self.data_layout, filename, *args, **kwargs)        
 
-    def to_html(self, width = None, height = None, **kwargs): 
-        return plot(self.data_layout,
-                    output_type="div",
-                    image_width = width or self.width, 
-                    image_height = height or self.height, 
-                    config = self.config, 
-                    include_plotlyjs = False,
-                    **kwargs,
-                    )
+    def to_html(self, width = None, height = None, use_plotlypy_plot = True, responsive = True, **kwargs):
+        fig_dict = self.to_plotly_fig_dict()
+        if responsive:
+            fig_dict['layout']['width'] = None
+            fig_dict['layout']['height'] = None
+        config = {**{'responsive': responsive}, **self.config}
+        if use_plotlypy_plot:
+            return plot(fig_dict,
+                        output_type="div",
+                        image_width = None if responsive else width or self.width,
+                        image_height = None if responsive else height or self.height,
+                        config = self.config,
+                        include_plotlyjs = False,
+                        **kwargs,
+                        )
+        else:
+            div_id = uuid.uuid4()
+            data_json = json.dumps(fig_dict['data'], cls = NumpyPandasJsonEncoder)
+            layout_json = json.dumps(fig_dict['layout'], cls = NumpyPandasJsonEncoder)
+            config_json = json.dumps(config)
+            return f"""
+                <div id="{div_id}" class="plotly-graph-div" style=""></div>
+                <script type="text/javascript">
+                window.PLOTLYENV=window.PLOTLYENV || {{}};
+                (function () {{
+                    var div_id = "{div_id}";
+                    if (document.getElementById(div_id)) {{
+                        Plotly.newPlot(div_id,{data_json}, {layout_json}, {config_json});
+                    }}
+                }})();
+                </script>"""
     
 def scatter(df, x_col, y_col, 
                      groups_col = None, tooltip_cols = None, group_order = None, 
