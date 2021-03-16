@@ -1,3 +1,4 @@
+from __future__ import annotations
 import numpy
 import pandas
 import copy
@@ -40,7 +41,6 @@ def charts_table(charts, cols):
 </style>
 <table class="table-no-border">
 """
-    div_ids = []
     for row in grouped(charts, cols):
         table_content += '<tr class="table-no-border">'
         for chart in row:
@@ -80,12 +80,6 @@ def percent_axis(axis_settings = {}, tick_precision = 0, hover_precision = 2):
     })
     
 default_layout = {
-    #'yaxis': {
-    #    'hoverformat': '.2f', 
-    #},
-    #'xaxis': {
-    #    'hoverformat': '.2f', 
-    #},
     'template': 'plotly_white',
     'margin': {
       'l': 60,
