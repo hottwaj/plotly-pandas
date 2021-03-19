@@ -167,19 +167,21 @@ class PlotlyChartBundle(object):
     def write_json(self, filename, *args, **kwargs):
         pio.write_json(self.data_layout, filename, *args, **kwargs)        
 
-    def to_html(self, width = None, height = None, responsive = True, **kwargs):
+    def to_html(self, width = None, height = None, responsive = True,
+                layout_overrides = {}, config_overrides = {}, **plot_kwargs):
         fig_dict = self.to_plotly_fig_dict()
         if responsive:
             fig_dict['layout']['width'] = None
             fig_dict['layout']['height'] = None
-        config = {**{'responsive': responsive}, **self.config}
+        dict_merge(fig_dict['layout'], layout_overrides)
+        config = dict_merge({**self.config, **{'responsive': responsive}}, config_overrides)
         return plot(fig_dict,
                     output_type="div",
                     image_width = None if responsive else width or self.width,
                     image_height = None if responsive else height or self.height,
                     config = config,
                     include_plotlyjs = False,
-                    **kwargs,
+                    **plot_kwargs,
                     )
     
 def scatter(df, x_col, y_col, 
