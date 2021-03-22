@@ -8,9 +8,24 @@ from functools import reduce
 from IPython.core.display import HTML, display
 import plotly
 from plotly.offline import iplot, plot
+
+import plotly.io._base_renderers
+class IFrameRendererWithFilenamesPerFigure(plotly.io._base_renderers.IFrameRenderer):
+    "Allow multiple charts displayed in the same cell to work, by writing each one to a different file"
+    _figure_count = 0
+
+    def build_filename(self):
+        IFrameRendererWithFilenamesPerFigure._figure_count += 1
+        filename = "{dirname}/figure_{cell_number}.html".format(
+            dirname=self.html_directory, cell_number=IFrameRendererWithFilenamesPerFigure._figure_count
+        )
+        return filename
+
 import plotly.io as pio
+pio.renderers["iframe"] = IFrameRendererWithFilenamesPerFigure(config={}, include_plotlyjs=True)
+pio.renderers["iframe_connected"] = IFrameRendererWithFilenamesPerFigure(config={}, include_plotlyjs="cdn")
 pio.renderers.default = 'iframe_connected'  #required to return a 'text/html' iframe bundle that can then be dropped as html
-    
+
 DEFAULT_COLORS = [
     '#1f77b4',  # muted blue
     '#ff7f0e',  # safety orange
