@@ -9,7 +9,7 @@ with open(path.join(here, 'README.md')) as f:
 setup(
     name='plotly-pandas',
 
-    version='1.3',
+    version='1.4W',
     
     python_requires='>3.7',
 

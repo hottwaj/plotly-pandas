@@ -3,11 +3,12 @@ import numpy
 import pandas
 import copy
 from datetime import datetime, date
-from itertools import zip_longest
+from itertools import zip_longest, cycle
 from functools import reduce
 from IPython.core.display import HTML, display
 import plotly
 from plotly.offline import iplot, plot
+from plotly.graph_objs import Figure
 
 import plotly.io._base_renderers
 class IFrameRendererWithFilenamesPerFigure(plotly.io._base_renderers.IFrameRenderer):
@@ -25,6 +26,7 @@ import plotly.io as pio
 pio.renderers["iframe"] = IFrameRendererWithFilenamesPerFigure(config={}, include_plotlyjs=True)
 pio.renderers["iframe_connected"] = IFrameRendererWithFilenamesPerFigure(config={}, include_plotlyjs="cdn")
 pio.renderers.default = 'iframe_connected'  #required to return a 'text/html' iframe bundle that can then be dropped as html
+pio.templates.default = "plotly_white" # set default template, see https://plotly.com/python/templates/
 
 DEFAULT_COLORS = [
     '#1f77b4',  # muted blue
@@ -95,7 +97,6 @@ def percent_axis(axis_settings = {}, tick_precision = 0, hover_precision = 2):
     })
     
 default_layout = {
-    'template': 'plotly_white',
     'margin': {
       'l': 60,
       'r': 50,
@@ -124,18 +125,44 @@ class PlotlyChartBundle(object):
     """Class for returning a displayable object wrapping a plotly chart.
     This is used to wrap a plotted chart so we can then drop it into a table if required."""
     
-    def __init__(self, data_layout, width, height, config):
+    def __init__(self, data_layout, width, height, config, plotly_template = pio.templates.default):
         self.data_layout = data_layout
         self.width = width
         self.height = height
         self.config = config
+        self.plotly_template = pio.templates[plotly_template] if isinstance(plotly_template, str) else plotly_template
+
+    _enable_validation = True
+
+    @classmethod
+    def set_plotly_validation(cls, enabled: bool):
+        """Enable/disable validation of plotly figures (when rendered to html/jupyter).
+        Note that disabling validation provides a circa 100x speedup of the function to_plotly_fig_dict below.
+        With validation enabled, plotly takes 10-50ms per chart to validate (depending on chart complexity)"""
+        cls._enable_validation = enabled
 
     def to_plotly_fig_dict(self):
         """Get figure & validate it - this provides standard checking of data&layout values given to plotly
         this is an abridged version of what is done by the functions:
-        plotly.offline.iplot & plotly.io._renderers.show"""
-        figure = plotly.tools.return_figure_from_figure_or_data(self.data_layout, validate_figure=True)
-        fig_dict = plotly.io._utils.validate_coerce_fig_to_dict(figure, validate=True)
+        - plotly.offline.iplot
+        - plotly.io._renderers.show"""
+        if self._enable_validation:
+            figure = plotly.tools.return_figure_from_figure_or_data(self.data_layout, self._enable_validation)
+        else:
+            figure = copy.deepcopy(self.data_layout)
+            # templates have to be applied manually if validation is disabled
+            # for layout styles see https://plotly.com/python/templates/#the-template-layout-property
+            dict_merge(figure['layout'], self.plotly_template['layout']._props)
+
+            # for data template styles see https://plotly.com/python/templates/#the-template-data-property
+            style_cycler_by_series_type = {}
+            for data_series in figure['data']:
+                series_type = data_series.get('type', 'bar')
+                if series_type not in style_cycler_by_series_type:
+                    style_cycler_by_series_type[series_type] = cycle(self.plotly_template['data'][series_type])
+                style = next(style_cycler_by_series_type[series_type])
+                dict_merge(data_series, style._props)
+        fig_dict = plotly.io._utils.validate_coerce_fig_to_dict(figure, validate=self._enable_validation)
         return fig_dict
         
     def _repr_mimebundle_(self, **kwargs):
